@@ -1,6 +1,7 @@
 import requests
 url = 'http://localhost:8081'
 headers = {'Accept' : '*/*', 'Content-Type' : 'application/json'}
+
 response = requests.get(url+"/status")
 if response.status_code == 200:
     print("status code:",response.status_code,"while fetching game data")
@@ -26,12 +27,16 @@ DEPTH = 20
 alpha = 0.05
 time_now = datetime.now().strftime("%m_%d_%H_%M")
 file_name = "policy_temp_"+time_now+".pickle"
-
+# Now generating random field filled with numbers between 1 to 9
+# Reset only changes locations of s and d 
+# Changed reward system on Env.step
 class Env:
     def __init__(self,status):
+        random.seed()
         self.row_size = status["width"]
         self.col_size = status["height"]
         self.grid = np.array((status["tiled"])).reshape((self.row_size,self.col_size))
+        self.init_grid = self.grid.copy()
         self.points = np.array((status["points"])).reshape((self.row_size,self.col_size))
         self.nround = status["turnLimit"]
         self.moves = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,0],[0,1],[1,-1],[1,0],[1,1]]
@@ -41,14 +46,17 @@ class Env:
         self.enemy_teamID = status["teams"][1]["teamID"]
         self.ax = status["teams"][0]["agents"][0]["y"] - 1
         self.ay = status["teams"][0]["agents"][0]["x"] - 1
+        self.ix = self.ax
+        self.iy = self.ay
+        self.done = False
     def print_status(self):
         print(self.ally_teamID)
         print(self.enemy_teamID)
     def reset(self):
         self.done = False
-        self.grid = np.array((status["tiled"])).reshape((self.row_size,self.col_size))
-        self.ax = status["teams"][0]["agents"][0]["y"] - 1
-        self.ay = status["teams"][0]["agents"][0]["x"] - 1     
+        self.grid = self.init_grid.copy()
+        self.ax = self.ix
+        self.ay = self.iy     
         self.ep_reward = 0
         self.cround = 0
         return np.concatenate((self.grid,self.points))
@@ -114,7 +122,10 @@ class PolicyNetwork(nn.Module):
         x = self.logsoftmax(x)
         # print("x = logsoftmax(x)",x)
         return x 
-def select_action(policy,state):
+env = Env(status)
+policy = PolicyNetwork(env.col_size*env.row_size*2, 4, 256)
+optimizer = optim.SGD(policy.parameters(), lr=1e-4)
+def select_action(state,policy):
     state = torch.from_numpy(state).float()
     probs = policy(state)
     # exp_probs = torch.exp(probs)
@@ -123,7 +134,7 @@ def select_action(policy,state):
     policy.log_probs.append(probs.squeeze()[action_n])
     return action_n
 
-def finish_episode(policy,optimizer):
+def finish_episode(policy):
     R = 0
     policy_loss = []
     Gt = []
@@ -143,42 +154,43 @@ def finish_episode(policy,optimizer):
     del policy.rewards[:]
     del policy.log_probs[:]
 
-def write_to_file(file_name,policy):
+def write_to_file(file_name):
     with open(file_name,"wb") as file:
         pickle.dump(policy,file)
     file1 = open("temp_last_policy.txt","w")
     file1.write(file_name)
-def test():   
-    env = Env(status) 
+    
+
+def test():    
     load_file_name = np.loadtxt('temp_last_policy.txt', dtype='str')
     pickle_in = open(str(load_file_name),"rb")
     print("loaded from: ",load_file_name)
     policy = pickle.load(pickle_in)
+    optimizer = optim.SGD(policy.parameters(), lr=1e-2)
     running_reward = 10
     while True:
         state, ep_reward = env.reset(), 0
         for t in range(1,DEPTH):
-            action = select_action(policy,state)
+            action = select_action(state,policy)
             state, reward, done = env.step(action)
             ep_reward += reward
             env.render()
             print(reward)
             if done:
                 break
-        print('episode reward: ', ep_reward)  
-def train(): 
-    env = Env(status)
-    policy = PolicyNetwork(env.col_size * env.row_size * 2, 9, 256)
-    optimizer = optim.SGD(policy.parameters(), lr=1e-4)
+        print('episode reward: ', ep_reward)
+
+def train():            
+    running_reward = 10
     for i_episode in count(1):
         state, ep_reward = env.reset(), 0
         for t in range(1, DEPTH): 
-            action = select_action(policy,state)
+            action = select_action(state,policy)
             state, reward, done = env.step(action)
             
             if(i_episode % 50000 == 0):
-                write_to_file(file_name,policy)
-                if i_episode % 300000 == 0:
+                write_to_file(file_name)
+                if i_episode % 10000 == 0:
                     env.render()
                     
             policy.rewards.append(reward)
@@ -190,12 +202,7 @@ def train():
             print('run: ', i_episode)
             print('episode reward: ', ep_reward)
 
-        finish_episode(policy,optimizer)
-def main(argv):
-    if argv == "test":
-        test()
-    else:
-        train()
+        finish_episode(policy)
 
 if __name__ == "__main__":
-   main(sys.argv[1])
+   train()

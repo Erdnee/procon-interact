@@ -136,9 +136,11 @@ class PolicyNetwork(nn.Module):
         # print("x = logsoftmax(x)",x)
         return x 
 
-
-policy = PolicyNetwork(5*5*2, 4, 256)
-env = Env(5, 5, 100)
+env = Env(status)
+load_file_name = np.loadtxt('temp_last_policy.txt', dtype='str')
+pickle_in = open(str(load_file_name),"rb")
+print("loaded from: ",load_file_name)
+policy = pickle.load(pickle_in)
 optimizer = optim.SGD(policy.parameters(), lr=1e-4)
 def select_action(state):
     state = torch.from_numpy(state).float()
