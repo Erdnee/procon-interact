@@ -21,7 +21,7 @@ url = 'http://localhost:8081'
 headers = {'Accept' : '*/*', 'Content-Type' : 'application/json'}
 admin_token = "qXf3PTcS41"
 token = ["team1","team2"]
-with open('../init-token.json') as f:
+with open('init-token.json') as f:
     game_token = json.load(f)
 def start_game(url, headers):
     response = requests.get(url+"/admin/"+admin_token+"/startgame")
@@ -109,8 +109,6 @@ def finish_episode(policy,optimizer):
     del policy.rewards[:]
     del policy.log_probs[:]
 
-
-
 reset_server(url,headers,init_field,game_token)
 status = fetch(url,headers)
 env1 = Env(status,1)
@@ -121,6 +119,8 @@ optimizer1 = optim.SGD(policy1.parameters(), lr=1e-4)
 optimizer2 = optim.SGD(policy2.parameters(), lr=1e-4)
 done = False
 sent_request = False
+reward1_by_episode = np.zeros(200) 
+reward2_by_episode = np.zeros(200) 
 for i_episode in count(1):
     if done:
         break
@@ -158,19 +158,20 @@ for i_episode in count(1):
                 sent_request = True
         else:
             time.sleep(0.5)
-        if(i_episode % 100 == 0):
-            with open("multi-agent-policy-1.pickle","wb") as file:
-                pickle.dump(policy1,file)
-            with open("multi-agent-policy-2.pickle","wb") as file:
-                pickle.dump(policy2,file)
-            print("saving policies")
-    print('run: ', i_episode)
         status = fetch(url,headers)
         env1 = Env(status,1)
         env2 = Env(status,2)
-        # print('running: {:d} samples\r'.format(i_episode), end = '')
-    # if (i_episode % 1000 == 0):
-    #     print('episode reward: ', ep_reward)
+    reward1_by_episode[i_episode] = ep_reward1
+    reward2_by_episode[i_episode] = ep_reward2
+    print('run: ', i_episode)
+    if(i_episode % 50 == 0):
+        np.savetxt("plot_data_multi_agent1.txt",reward1_by_episode)
+        np.savetxt("plot_data_multi_agent2.txt",reward2_by_episode)
+        with open("multi-agent-policy-1.pickle","wb") as file:
+            pickle.dump(policy1,file)
+        with open("multi-agent-policy-2.pickle","wb") as file:
+            pickle.dump(policy2,file)
+        print("saving policies")
 
     finish_episode(policy1,optimizer1)
     finish_episode(policy2,optimizer2)
