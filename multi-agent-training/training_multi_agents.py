@@ -15,7 +15,7 @@ parser.add_argument('agentNo', type=int, help='1 for agent1, 2 for agent2')
 GAMMA = 0.9
 eps = np.finfo(np.float32).eps.item()
 alpha = 0.05
-with open('../init-field.json') as f:
+with open('field-info.json') as f:
     init_field = json.load(f)
 url = 'http://localhost:8081'
 headers = {'Accept' : '*/*', 'Content-Type' : 'application/json'}
